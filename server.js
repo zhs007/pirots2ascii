@@ -7,13 +7,13 @@ const path = require('path');
 const app = express();
 const port = process.env.PORT || 3001;
 
-// 配置文件上传
+// Configure file upload
 const upload = multer({ dest: 'uploads/' });
 
-// 静态文件服务
+// Static file service
 app.use(express.static('public'));
 
-// 创建符号映射表
+// Create symbol mapping table
 const symbolMap = {
   '0': '0', '1': '1', '2': '2', '3': '3', '4': '4', '5': '5',
   '6': '6', '7': '7', '8': '8', '9': '9', 'a': 'a', 'b': 'b',
@@ -21,7 +21,7 @@ const symbolMap = {
   'X': 'X', '-': '·', 'B': 'F'
 };
 
-// 检查局面是否为空（只包含空白符号）
+// Check if board is empty (contains only blank symbols)
 function isBoardEmpty(board) {
   if (!board || board.length === 0) return true;
   
@@ -35,7 +35,7 @@ function isBoardEmpty(board) {
   return true;
 }
 
-// 解析局面数据的函数
+// Function to parse board data
 function parseWindowData(windowStr) {
   if (!windowStr) return [];
   
@@ -61,16 +61,16 @@ function parseWindowData(windowStr) {
   return board;
 }
 
-// 解析位掩码并返回高亮位置
+// Parse bit mask and return highlight positions
 function parseMask(maskStr) {
   if (!maskStr) return [];
   
-  // 移除可能的前缀0并转换为二进制
+  // Remove possible prefix 0s and convert to binary
   const hexValue = maskStr.replace(/^0+/, '') || '0';
   const binaryStr = parseInt(hexValue, 16).toString(2).padStart(64, '0');
   
   const positions = [];
-  // 从右到左遍历二进制字符串（对应从左上到右下的游戏位置）
+  // Traverse binary string from right to left (corresponding to game positions from top-left to bottom-right)
   for (let i = 0; i < 64; i++) {
     if (binaryStr[63 - i] === '1') {
       const row = Math.floor(i / 8);
@@ -82,7 +82,7 @@ function parseMask(maskStr) {
   return positions;
 }
 
-// 格式化ASCII输出（支持高亮显示）
+// Format ASCII output (supports highlighting)
 function formatBoard(board, title = '', highlightPositions = [], isHTML = false) {
   if (!board || board.length === 0) return '';
   
@@ -94,28 +94,28 @@ function formatBoard(board, title = '', highlightPositions = [], isHTML = false)
   const rows = board.length;
   const cols = board[0] ? board[0].length : 0;
   
-  // 实现"左为下，右为上，上为右，下为左"的显示
-  // 在360度基础上再顺时针转90度（总共90度旋转）
+  // Implement "left as down, right as up, up as right, down as left" display
+  // 90-degree clockwise rotation on top of 360-degree base (total 90-degree rotation)
   
-  // 添加顶部边框
+  // Add top border
   output += '+' + '-'.repeat(rows * 2 + 1) + '+\n';
   
-  // 90度顺时针旋转：按列从右到左遍历，每列从上到下
+  // 90-degree clockwise rotation: traverse columns from right to left, each column from top to bottom
   for (let col = cols - 1; col >= 0; col--) {
     output += '| ';
     for (let row = 0; row < rows; row++) {
       const cell = board[row][col];
       const symbol = (cell || ' ');
       
-      // 检查当前位置是否需要高亮
+      // Check if current position needs highlighting
       const isHighlighted = highlightPositions.some(pos => 7-pos.row === row && pos.col === col);
       
       if (isHighlighted) {
         if (isHTML) {
-          // HTML模式：使用span标签和CSS样式
+          // HTML mode: use span tags and CSS styles
           output += `<span style="background-color: yellow; color: black; font-weight: bold;">${symbol}</span> `;
         } else {
-          // 终端模式：使用ANSI颜色代码（黄色背景）
+          // Terminal mode: use ANSI color codes (yellow background)
           output += `\x1b[43m${symbol}\x1b[0m `;
         }
       } else {
@@ -125,13 +125,13 @@ function formatBoard(board, title = '', highlightPositions = [], isHTML = false)
     output += '|\n';
   }
   
-  // 添加底部边框
+  // Add bottom border
   output += '+' + '-'.repeat(rows * 2 + 1) + '+\n';
   
   return output;
 }
 
-// 解析路径数据，将分号分隔的x,y坐标转换为坐标数组
+// Parse path data, convert semicolon-separated x,y coordinates to coordinate array
 function parsePath(pathStr) {
   if (!pathStr) return [];
   
@@ -142,11 +142,11 @@ function parsePath(pathStr) {
   });
 }
 
-// 创建路径可视化的ASCII表格
+// Create ASCII table for path visualization
 function visualizePath(pathCoords, title, gridSize = { width: 8, height: 8 }) {
   const grid = Array(gridSize.height).fill().map(() => Array(gridSize.width).fill('·'));
   
-  // 标记路径上的点
+  // Mark points on the path
   pathCoords.forEach((coord, index) => {
     if (coord.x >= 0 && coord.x < gridSize.width && coord.y >= 0 && coord.y < gridSize.height) {
       if (index === 0) {
@@ -159,7 +159,7 @@ function visualizePath(pathCoords, title, gridSize = { width: 8, height: 8 }) {
     }
   });
   
-  // 生成ASCII输出
+  // Generate ASCII output
   let output = `${title}\n`;
   output += '+' + '-'.repeat(gridSize.width * 2 + 1) + '+\n';
   
@@ -172,23 +172,23 @@ function visualizePath(pathCoords, title, gridSize = { width: 8, height: 8 }) {
   }
   
   output += '+' + '-'.repeat(gridSize.width * 2 + 1) + '+\n';
-  output += `路径: ${pathCoords.map(coord => `(${coord.x},${coord.y})`).join(' → ')}\n`;
+  output += `Path: ${pathCoords.map(coord => `(${coord.x},${coord.y})`).join(' → ')}\n`;
   
   return output;
 }
 
-// 新的STEP路径可视化函数，支持S、P、E标记
+// New STEP path visualization function, supports S, P, E markers
 function visualizeStepPath(points, title, gridSize = { width: 8, height: 8 }) {
   const grid = Array(gridSize.height).fill().map(() => Array(gridSize.width).fill('·'));
   
-  // 标记不同类型的点
+  // Mark different types of points
   points.forEach(point => {
     if (point.x >= 0 && point.x < gridSize.width && point.y >= 0 && point.y < gridSize.height) {
-      grid[7-point.y][point.x] = point.type; // S, P, 或 E
+      grid[7-point.y][point.x] = point.type; // S, P, or E
     }
   });
   
-  // 生成ASCII输出
+  // Generate ASCII output
   let output = `${title}\n`;
   output += '+' + '-'.repeat(gridSize.width * 2 + 1) + '+\n';
   
@@ -202,25 +202,25 @@ function visualizeStepPath(points, title, gridSize = { width: 8, height: 8 }) {
   
   output += '+' + '-'.repeat(gridSize.width * 2 + 1) + '+\n';
   
-  // 分类显示点的信息
+  // Display point information by category
   const startPoints = points.filter(p => p.type === 'S');
   const pathPoints = points.filter(p => p.type === 'P');
   const endPoints = points.filter(p => p.type === 'E');
   
   if (startPoints.length > 0) {
-    output += `起点(S): ${startPoints.map(p => `(${p.x},${p.y})`).join(', ')}\n`;
+    output += `Start Point(S): ${startPoints.map(p => `(${p.x},${p.y})`).join(', ')}\n`;
   }
   if (pathPoints.length > 0) {
-    output += `路径(P): ${pathPoints.map(p => `(${p.x},${p.y})`).join(' → ')}\n`;
+    output += `Path Points(P): ${pathPoints.map(p => `(${p.x},${p.y})`).join(' → ')}\n`;
   }
   if (endPoints.length > 0) {
-    output += `终点(E): ${endPoints.map(p => `(${p.x},${p.y})`).join(', ')}\n`;
+    output += `End Point(E): ${endPoints.map(p => `(${p.x},${p.y})`).join(', ')}\n`;
   }
   
   return output;
 }
 
-// 解析XML并提取所有window数据和STEP数据
+// Parse XML and extract all window data and STEP data
 function parseGameData(xmlContent) {
   const parser = new xml2js.Parser({ explicitArray: false });
   const results = [];
@@ -233,10 +233,10 @@ function parseGameData(xmlContent) {
       }
       
       try {
-        // 提取CDATA内容
+        // Extract CDATA content
         const pubdata = result.response.game.pubdata;
         
-        // 解析内部XML
+        // Parse internal XML
         parser.parseString(pubdata, (err, gameData) => {
           if (err) {
             reject(err);
@@ -246,7 +246,7 @@ function parseGameData(xmlContent) {
           const purchase = gameData.PURCHASES.PURCHASE;
           let sequenceNumber = 1;
           
-          // 解析每个RESULT中的数据
+          // Parse data in each RESULT
           if (purchase.RESULT) {
             const results_data = Array.isArray(purchase.RESULT) ? purchase.RESULT : [purchase.RESULT];
             console.log(`Found ${results_data.length} RESULT(s)`);
@@ -254,8 +254,8 @@ function parseGameData(xmlContent) {
                results_data.forEach((result, resultIndex) => {
             console.log(`Processing Result ${resultIndex}`);
             
-            // 处理REELSET - 可能是数组或单个对象
-            // 暂时注释掉 reels 和 layer 的显示
+            // Handle REELSET - could be array or single object
+            // Temporarily comment out reels and layer display
             /*
             if (result.SCOPE && result.SCOPE.REELSET) {
               const reelsets = Array.isArray(result.SCOPE.REELSET) 
@@ -264,15 +264,15 @@ function parseGameData(xmlContent) {
               
               console.log(`Result ${resultIndex} has ${reelsets.length} REELSET(s)`);
               
-              // 先收集所有的 reels 和 layer 数据，然后按正确顺序添加
+              // First collect all reels and layer data, then add in correct order
               const currentResultData = [];
               
               reelsets.forEach((reelset, reelsetIndex) => {
                 console.log(`Processing REELSET ${reelsetIndex} in Result ${resultIndex}`);
                 console.log(`REELSET structure:`, JSON.stringify(reelset, null, 2).substring(0, 200));
                 
-                // 1. 先添加 REELSET 中的 reels 数据
-                // XML属性通常在 $ 对象中，或者直接作为属性
+                // 1. First add reels data from REELSET
+                // XML attributes are usually in $ object, or directly as properties
                 const reelsData = reelset.$ && reelset.$.reels || reelset.reels;
                 if (reelsData) {
                   console.log(`Found reels data in REELSET ${reelsetIndex}: ${reelsData.substring(0, 50)}...`);
@@ -283,11 +283,11 @@ function parseGameData(xmlContent) {
                     board: board,
                     rawData: reelsData,
                     dataType: 'reels',
-                    order: 1 // reels 优先级为 1
+                    order: 1 // reels priority is 1
                   });
                 }
                 
-                // 2. 然后添加 LAYER 中的 data 数据
+                // 2. Then add data from LAYER
                 if (reelset.LAYER) {
                   const layers = Array.isArray(reelset.LAYER) 
                     ? reelset.LAYER 
@@ -298,7 +298,7 @@ function parseGameData(xmlContent) {
                   layers.forEach((layer, layerIndex) => {
                     let layerData = null;
                     
-                    // 尝试各种可能的属性访问方式
+                    // Try various possible property access methods
                     if (layer.$ && layer.$.data) {
                       layerData = layer.$.data;
                     } else if (layer.data) {
@@ -316,39 +316,39 @@ function parseGameData(xmlContent) {
                         board: board,
                         rawData: layerData,
                         dataType: 'layer',
-                        order: 2 // layer 优先级为 2
+                        order: 2 // layer priority is 2
                       });
                     }
                   });
                 }
               });
               
-              // 按正确顺序排序：先 reels，后 layer
+              // Sort in correct order: reels first, then layer
               currentResultData.sort((a, b) => a.order - b.order);
               console.log(`Current result data after sorting:`, currentResultData.map(item => `${item.order}:${item.type}`));
               
-              // 添加序号并加入结果
+              // Add sequence numbers and add to results
               currentResultData.forEach(item => {
                 item.title = `${sequenceNumber++}. ${item.title}`;
                 console.log(`Adding: ${item.title}`);
-                delete item.order; // 删除临时的排序字段
+                delete item.order; // Delete temporary sorting field
                 results.push(item);
               });
             }
             */
             
-            // 3. 动作中的window数据和STEP数据
+            // 3. Window data and STEP data in actions
             if (result.ACTIONS && result.ACTIONS.ORDERED && result.ACTIONS.ORDERED.ACTION) {
               const actions = Array.isArray(result.ACTIONS.ORDERED.ACTION) 
                 ? result.ACTIONS.ORDERED.ACTION 
                 : [result.ACTIONS.ORDERED.ACTION];
               
               actions.forEach((action, actionIndex) => {
-                // 处理window数据
+                // Handle window data
                 if (action.$ && action.$.window) {
                   const board = parseWindowData(action.$.window);
                   
-                  // 解析mask（如果存在）来获取高亮位置
+                  // Parse mask (if exists) to get highlight positions
                   let highlightPositions = [];
                   let maskInfo = '';
                   if (action.$.mask) {
@@ -368,33 +368,33 @@ function parseGameData(xmlContent) {
                   });
                 }
                 
-                // 处理STEP数据 - 提取path信息
+                // Handle STEP data - extract path information
                 if (action.STEP) {
                   const steps = Array.isArray(action.STEP) ? action.STEP : [action.STEP];
                   
                   steps.forEach((step, stepIndex) => {
                     if (step.$) {
-                      // 收集所有点：起点(S)、路径点(P)、终点(E)
+                      // Collect all points: start point(S), path points(P), end point(E)
                       const allPoints = [];
                       
-                      // 添加起点 (prev-pos)
+                      // Add start point (prev-pos)
                       if (step.$['prev-pos']) {
                         const [x, y] = step.$['prev-pos'].split(',').map(Number);
-                        allPoints.push({ x, y, type: 'S', label: '起点' });
+                        allPoints.push({ x, y, type: 'S', label: 'Start Point' });
                       }
                       
-                      // 添加路径点 (path)
+                      // Add path points (path)
                       if (step.$.path) {
                         const pathPoints = parsePath(step.$.path);
                         pathPoints.forEach(point => {
-                          allPoints.push({ x: point.x, y: point.y, type: 'P', label: '路径' });
+                          allPoints.push({ x: point.x, y: point.y, type: 'P', label: 'Path' });
                         });
                       }
                       
-                      // 添加终点 (pos)
+                      // Add end point (pos)
                       if (step.$.pos) {
                         const [x, y] = step.$.pos.split(',').map(Number);
-                        allPoints.push({ x, y, type: 'E', label: '终点' });
+                        allPoints.push({ x, y, type: 'E', label: 'End Point' });
                       }
                       
                       if (allPoints.length > 0) {
@@ -404,7 +404,7 @@ function parseGameData(xmlContent) {
                         results.push({
                           type: 'step',
                           title: `${sequenceNumber++}. Result ${resultIndex} - Action: ${action.$.name || 'Unknown'} - Step ${stepIndex + 1} Path`,
-                          board: null, // 不使用标准棋盘，使用路径可视化
+                          board: null, // Don't use standard board, use path visualization
                           pathVisualization: pathVisualization,
                           pathCoords: allPoints,
                           rawData: `Path: ${step.$.path || 'N/A'}, Position: ${step.$.pos || 'N/A'}, Previous: ${step.$['prev-pos'] || 'N/A'}`,
@@ -439,15 +439,15 @@ function parseGameData(xmlContent) {
   });
 }
 
-// 主页面
+// Main page
 app.get('/', (req, res) => {
   res.send(`
     <!DOCTYPE html>
-    <html lang="zh-CN">
+    <html lang="en">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Pirots2ASCII - 游戏局面重现</title>
+        <title>Pirots2ASCII - Game Board Visualization</title>
         <style>
             body {
                 font-family: 'Courier New', monospace;
@@ -537,15 +537,15 @@ app.get('/', (req, res) => {
     </head>
     <body>
         <div class="container">
-            <h1>🎮 Pirots2ASCII - 游戏局面重现工具</h1>
+            <h1>🎮 Pirots2ASCII - Game Board Visualization Tool</h1>
             
             <div class="upload-area">
-                <h3>上传 XML 文件</h3>
-                <p>请选择包含游戏数据的 XML 文件</p>
+                <h3>Upload XML File</h3>
+                <p>Please select an XML file containing game data</p>
                 <form action="/upload" method="post" enctype="multipart/form-data">
                     <input type="file" name="xmlfile" accept=".xml" required style="margin: 10px;">
                     <br>
-                    <button type="submit" class="btn">解析并显示游戏局面</button>
+                    <button type="submit" class="btn">Parse and Display Game Board</button>
                 </form>
             </div>
             
@@ -567,27 +567,27 @@ app.get('/', (req, res) => {
   `);
 });
 
-// 处理文件上传
+// Handle file upload
 app.post('/upload', upload.single('xmlfile'), async (req, res) => {
   try {
     if (!req.file) {
-      return res.status(400).send('请选择一个文件');
+      return res.status(400).send('Please select a file');
     }
     
-    // 读取上传的文件
+    // Read uploaded file
     const xmlContent = fs.readFileSync(req.file.path, 'utf8');
     
-    // 解析游戏数据
+    // Parse game data
     const gameStates = await parseGameData(xmlContent);
     
-    // 生成HTML输出
+    // Generate HTML output
     let html = `
       <!DOCTYPE html>
-      <html lang="zh-CN">
+      <html lang="en">
       <head>
           <meta charset="UTF-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>游戏局面重现结果</title>
+          <title>Game Board Visualization Results</title>
           <style>
               body {
                   font-family: 'Courier New', monospace;
@@ -672,27 +672,27 @@ app.post('/upload', upload.single('xmlfile'), async (req, res) => {
       </head>
       <body>
           <div class="container">
-              <a href="/" class="back-btn">← 返回上传页面</a>
-              <h1>🎮 游戏局面重现结果</h1>
+              <a href="/" class="back-btn">← Back to Upload</a>
+              <h1>🎮 Game Board Visualization Results</h1>
               
               <div class="summary">
-                  <h3>解析摘要</h3>
-                  <p>总共找到 <strong>${gameStates.length}</strong> 个游戏状态</p>
-                  <p>文件名: <strong>${req.file.originalname}</strong></p>
+                  <h3>Parse Summary</h3>
+                  <p>Total <strong>${gameStates.length}</strong> game states found</p>
+                  <p>File name: <strong>${req.file.originalname}</strong></p>
               </div>
     `;
     
-    // 添加每个游戏状态
+    // Add each game state
     gameStates.forEach((state, index) => {
       let content = '';
       let dataTypeColor = '#dc3545'; // default red for window
       
       if (state.dataType === 'path') {
-        // 路径可视化
+        // Path visualization
         content = state.pathVisualization;
         dataTypeColor = '#ff6b35'; // orange for path
       } else {
-        // 标准棋盘显示
+        // Standard board display
         content = formatBoard(state.board, state.title, state.highlightPositions || [], true);
         dataTypeColor = state.dataType === 'reels' ? '#007bff' : 
                        state.dataType === 'layer' ? '#28a745' : '#dc3545';
@@ -705,26 +705,26 @@ app.post('/upload', upload.single('xmlfile'), async (req, res) => {
             <div class="board-title">${state.title} ${dataTypeBadge}</div>
             <div class="board">${content}</div>
             <div class="toggle-raw" onclick="toggleRaw(${index})">
-                显示/隐藏详细信息
+                Show/Hide Details
             </div>
             <div class="raw-data" id="raw-${index}">
-                <strong>数据类型:</strong> ${state.dataType?.toUpperCase() || 'WINDOW'}<br>
-                ${state.mask ? `<strong>位掩码:</strong> ${state.mask}<br>` : ''}
+                <strong>Data Type:</strong> ${state.dataType?.toUpperCase() || 'WINDOW'}<br>
+                ${state.mask ? `<strong>Bit Mask:</strong> ${state.mask}<br>` : ''}
                 ${state.highlightPositions && state.highlightPositions.length > 0 ? 
-                  `<strong>高亮位置:</strong> ${state.highlightPositions.map(p => `(${p.row},${p.col})`).join(', ')}<br>` : ''}
+                  `<strong>Highlight Positions:</strong> ${state.highlightPositions.map(p => `(${p.row},${p.col})`).join(', ')}<br>` : ''}
                 ${state.pathCoords && state.pathCoords.length > 0 ? 
-                  `<strong>路径坐标:</strong> ${state.pathCoords.map(p => `(${p.x},${p.y})`).join(' → ')}<br>` : ''}
+                  `<strong>Path Coordinates:</strong> ${state.pathCoords.map(p => `(${p.x},${p.y})`).join(' → ')}<br>` : ''}
                 ${state.stepData ? `
-                  <strong>步骤信息:</strong><br>
-                  • 符号: ${state.stepData.sym || 'N/A'}<br>
-                  • 当前位置: ${state.stepData.pos || 'N/A'}<br>
-                  • 前一位置: ${state.stepData.prevPos || 'N/A'}<br>
-                  • 赢分: ${state.stepData.win || '0'}<br>
-                  ${state.stepData.firstStep ? '• 首步<br>' : ''}
-                  ${state.stepData.lastStep ? '• 末步<br>' : ''}
-                  ${state.stepData.angryBirds ? `• 愤怒的小鸟: ${state.stepData.angryBirds}<br>` : ''}
+                  <strong>Step Information:</strong><br>
+                  • Symbol: ${state.stepData.sym || 'N/A'}<br>
+                  • Current Position: ${state.stepData.pos || 'N/A'}<br>
+                  • Previous Position: ${state.stepData.prevPos || 'N/A'}<br>
+                  • Win Amount: ${state.stepData.win || '0'}<br>
+                  ${state.stepData.firstStep ? '• First Step<br>' : ''}
+                  ${state.stepData.lastStep ? '• Last Step<br>' : ''}
+                  ${state.stepData.angryBirds ? `• Angry Birds: ${state.stepData.angryBirds}<br>` : ''}
                 ` : ''}
-                <strong>原始数据:</strong><br>
+                <strong>Raw Data:</strong><br>
                 ${state.rawData}
             </div>
         </div>
@@ -748,27 +748,27 @@ app.post('/upload', upload.single('xmlfile'), async (req, res) => {
       </html>
     `;
     
-    // 清理上传的临时文件
+    // Clean up uploaded temporary file
     fs.unlinkSync(req.file.path);
     
     res.send(html);
     
   } catch (error) {
-    console.error('解析错误:', error);
+    console.error('Parse error:', error);
     res.status(500).send(`
-      <h1>解析错误</h1>
-      <p>无法解析上传的XML文件: ${error.message}</p>
-      <a href="/">返回</a>
+      <h1>Parse Error</h1>
+      <p>Unable to parse the uploaded XML file: ${error.message}</p>
+      <a href="/">Back</a>
     `);
   }
 });
 
-// 确保uploads目录存在
+// Ensure uploads directory exists
 if (!fs.existsSync('uploads')) {
   fs.mkdirSync('uploads');
 }
 
 app.listen(port, () => {
-  console.log(`Pirots2ASCII 服务器运行在 http://localhost:${port}`);
-  console.log('请打开浏览器访问上述地址来上传和解析XML文件');
+  console.log(`Pirots2ASCII server running on http://localhost:${port}`);
+  console.log('Please open your browser and visit the above address to upload and parse XML files');
 });
