@@ -131,7 +131,96 @@ function formatBoard(board, title = '', highlightPositions = [], isHTML = false)
   return output;
 }
 
-// 解析XML并提取所有window数据
+// 解析路径数据，将分号分隔的x,y坐标转换为坐标数组
+function parsePath(pathStr) {
+  if (!pathStr) return [];
+  
+  const coordinates = pathStr.split(';');
+  return coordinates.map(coord => {
+    const [x, y] = coord.split(',').map(Number);
+    return { x, y };
+  });
+}
+
+// 创建路径可视化的ASCII表格
+function visualizePath(pathCoords, title, gridSize = { width: 8, height: 8 }) {
+  const grid = Array(gridSize.height).fill().map(() => Array(gridSize.width).fill('·'));
+  
+  // 标记路径上的点
+  pathCoords.forEach((coord, index) => {
+    if (coord.x >= 0 && coord.x < gridSize.width && coord.y >= 0 && coord.y < gridSize.height) {
+      if (index === 0) {
+        grid[coord.y][coord.x] = 'S'; // Start
+      } else if (index === pathCoords.length - 1) {
+        grid[coord.y][coord.x] = 'E'; // End
+      } else {
+        grid[coord.y][coord.x] = '●'; // Path point
+      }
+    }
+  });
+  
+  // 生成ASCII输出
+  let output = `${title}\n`;
+  output += '+' + '-'.repeat(gridSize.width * 2 + 1) + '+\n';
+  
+  for (let row = 0; row < gridSize.height; row++) {
+    output += '| ';
+    for (let col = 0; col < gridSize.width; col++) {
+      output += grid[row][col] + ' ';
+    }
+    output += '|\n';
+  }
+  
+  output += '+' + '-'.repeat(gridSize.width * 2 + 1) + '+\n';
+  output += `路径: ${pathCoords.map(coord => `(${coord.x},${coord.y})`).join(' → ')}\n`;
+  
+  return output;
+}
+
+// 新的STEP路径可视化函数，支持S、P、E标记
+function visualizeStepPath(points, title, gridSize = { width: 8, height: 8 }) {
+  const grid = Array(gridSize.height).fill().map(() => Array(gridSize.width).fill('·'));
+  
+  // 标记不同类型的点
+  points.forEach(point => {
+    if (point.x >= 0 && point.x < gridSize.width && point.y >= 0 && point.y < gridSize.height) {
+      grid[7-point.y][point.x] = point.type; // S, P, 或 E
+    }
+  });
+  
+  // 生成ASCII输出
+  let output = `${title}\n`;
+  output += '+' + '-'.repeat(gridSize.width * 2 + 1) + '+\n';
+  
+  for (let row = 0; row < gridSize.height; row++) {
+    output += '| ';
+    for (let col = 0; col < gridSize.width; col++) {
+      output += grid[row][col] + ' ';
+    }
+    output += '|\n';
+  }
+  
+  output += '+' + '-'.repeat(gridSize.width * 2 + 1) + '+\n';
+  
+  // 分类显示点的信息
+  const startPoints = points.filter(p => p.type === 'S');
+  const pathPoints = points.filter(p => p.type === 'P');
+  const endPoints = points.filter(p => p.type === 'E');
+  
+  if (startPoints.length > 0) {
+    output += `起点(S): ${startPoints.map(p => `(${p.x},${p.y})`).join(', ')}\n`;
+  }
+  if (pathPoints.length > 0) {
+    output += `路径(P): ${pathPoints.map(p => `(${p.x},${p.y})`).join(' → ')}\n`;
+  }
+  if (endPoints.length > 0) {
+    output += `终点(E): ${endPoints.map(p => `(${p.x},${p.y})`).join(', ')}\n`;
+  }
+  
+  return output;
+}
+
+// 解析XML并提取所有window数据和STEP数据
 function parseGameData(xmlContent) {
   const parser = new xml2js.Parser({ explicitArray: false });
   const results = [];
@@ -248,13 +337,14 @@ function parseGameData(xmlContent) {
             }
             */
             
-            // 3. 动作中的window数据
+            // 3. 动作中的window数据和STEP数据
             if (result.ACTIONS && result.ACTIONS.ORDERED && result.ACTIONS.ORDERED.ACTION) {
               const actions = Array.isArray(result.ACTIONS.ORDERED.ACTION) 
                 ? result.ACTIONS.ORDERED.ACTION 
                 : [result.ACTIONS.ORDERED.ACTION];
               
               actions.forEach((action, actionIndex) => {
+                // 处理window数据
                 if (action.$ && action.$.window) {
                   const board = parseWindowData(action.$.window);
                   
@@ -277,10 +367,68 @@ function parseGameData(xmlContent) {
                     mask: action.$.mask
                   });
                 }
+                
+                // 处理STEP数据 - 提取path信息
+                if (action.STEP) {
+                  const steps = Array.isArray(action.STEP) ? action.STEP : [action.STEP];
+                  
+                  steps.forEach((step, stepIndex) => {
+                    if (step.$) {
+                      // 收集所有点：起点(S)、路径点(P)、终点(E)
+                      const allPoints = [];
+                      
+                      // 添加起点 (prev-pos)
+                      if (step.$['prev-pos']) {
+                        const [x, y] = step.$['prev-pos'].split(',').map(Number);
+                        allPoints.push({ x, y, type: 'S', label: '起点' });
+                      }
+                      
+                      // 添加路径点 (path)
+                      if (step.$.path) {
+                        const pathPoints = parsePath(step.$.path);
+                        pathPoints.forEach(point => {
+                          allPoints.push({ x: point.x, y: point.y, type: 'P', label: '路径' });
+                        });
+                      }
+                      
+                      // 添加终点 (pos)
+                      if (step.$.pos) {
+                        const [x, y] = step.$.pos.split(',').map(Number);
+                        allPoints.push({ x, y, type: 'E', label: '终点' });
+                      }
+                      
+                      if (allPoints.length > 0) {
+                        const pathVisualization = visualizeStepPath(allPoints, 
+                          `Action: ${action.$.name || 'Unknown'} - Step ${stepIndex + 1}`);
+                        
+                        results.push({
+                          type: 'step',
+                          title: `${sequenceNumber++}. Result ${resultIndex} - Action: ${action.$.name || 'Unknown'} - Step ${stepIndex + 1} Path`,
+                          board: null, // 不使用标准棋盘，使用路径可视化
+                          pathVisualization: pathVisualization,
+                          pathCoords: allPoints,
+                          rawData: `Path: ${step.$.path || 'N/A'}, Position: ${step.$.pos || 'N/A'}, Previous: ${step.$['prev-pos'] || 'N/A'}`,
+                          actionName: action.$.name,
+                          dataType: 'path',
+                          stepData: {
+                            path: step.$.path,
+                            pos: step.$.pos,
+                            prevPos: step.$['prev-pos'],
+                            sym: step.$.sym,
+                            win: step.$.win,
+                            angryBirds: step.$['angry-birds'],
+                            firstStep: step.$['first-step'],
+                            lastStep: step.$['last-step']
+                          }
+                        });
+                      }
+                    }
+                  });
+                }
               });
             }
           });
-          }
+        }
           
           resolve(results);
         });
@@ -536,23 +684,46 @@ app.post('/upload', upload.single('xmlfile'), async (req, res) => {
     
     // 添加每个游戏状态
     gameStates.forEach((state, index) => {
-      const asciiBoard = formatBoard(state.board, state.title, state.highlightPositions || [], true);
-      const dataTypeColor = state.dataType === 'reels' ? '#007bff' : 
-                           state.dataType === 'layer' ? '#28a745' : '#dc3545';
+      let content = '';
+      let dataTypeColor = '#dc3545'; // default red for window
+      
+      if (state.dataType === 'path') {
+        // 路径可视化
+        content = state.pathVisualization;
+        dataTypeColor = '#ff6b35'; // orange for path
+      } else {
+        // 标准棋盘显示
+        content = formatBoard(state.board, state.title, state.highlightPositions || [], true);
+        dataTypeColor = state.dataType === 'reels' ? '#007bff' : 
+                       state.dataType === 'layer' ? '#28a745' : '#dc3545';
+      }
+      
       const dataTypeBadge = `<span style="background-color: ${dataTypeColor}; color: white; padding: 2px 6px; border-radius: 3px; font-size: 11px; margin-left: 10px;">${state.dataType?.toUpperCase() || 'WINDOW'}</span>`;
       
       html += `
         <div class="board-container">
             <div class="board-title">${state.title} ${dataTypeBadge}</div>
-            <div class="board">${asciiBoard}</div>
+            <div class="board">${content}</div>
             <div class="toggle-raw" onclick="toggleRaw(${index})">
-                显示/隐藏原始数据
+                显示/隐藏详细信息
             </div>
             <div class="raw-data" id="raw-${index}">
                 <strong>数据类型:</strong> ${state.dataType?.toUpperCase() || 'WINDOW'}<br>
                 ${state.mask ? `<strong>位掩码:</strong> ${state.mask}<br>` : ''}
                 ${state.highlightPositions && state.highlightPositions.length > 0 ? 
                   `<strong>高亮位置:</strong> ${state.highlightPositions.map(p => `(${p.row},${p.col})`).join(', ')}<br>` : ''}
+                ${state.pathCoords && state.pathCoords.length > 0 ? 
+                  `<strong>路径坐标:</strong> ${state.pathCoords.map(p => `(${p.x},${p.y})`).join(' → ')}<br>` : ''}
+                ${state.stepData ? `
+                  <strong>步骤信息:</strong><br>
+                  • 符号: ${state.stepData.sym || 'N/A'}<br>
+                  • 当前位置: ${state.stepData.pos || 'N/A'}<br>
+                  • 前一位置: ${state.stepData.prevPos || 'N/A'}<br>
+                  • 赢分: ${state.stepData.win || '0'}<br>
+                  ${state.stepData.firstStep ? '• 首步<br>' : ''}
+                  ${state.stepData.lastStep ? '• 末步<br>' : ''}
+                  ${state.stepData.angryBirds ? `• 愤怒的小鸟: ${state.stepData.angryBirds}<br>` : ''}
+                ` : ''}
                 <strong>原始数据:</strong><br>
                 ${state.rawData}
             </div>
