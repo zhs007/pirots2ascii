@@ -177,14 +177,31 @@ function visualizePath(pathCoords, title, gridSize = { width: 8, height: 8 }) {
   return output;
 }
 
-// New STEP path visualization function, supports S, P, E markers
+// New STEP path visualization function, supports S, sequential numbered path points, E markers
 function visualizeStepPath(points, title, gridSize = { width: 8, height: 8 }) {
   const grid = Array(gridSize.height).fill().map(() => Array(gridSize.width).fill('·'));
   
+  // Generate sequential labels for path points: 1,2,3...9,a,b,c...
+  function getSequentialLabel(index) {
+    if (index < 9) {
+      return (index + 1).toString(); // 1-9
+    } else {
+      return String.fromCharCode(97 + index - 9); // a,b,c,d,e,f,g,h...
+    }
+  }
+  
   // Mark different types of points
+  let pathPointIndex = 0;
   points.forEach(point => {
     if (point.x >= 0 && point.x < gridSize.width && point.y >= 0 && point.y < gridSize.height) {
-      grid[7-point.y][point.x] = point.type; // S, P, or E
+      if (point.type === 'S') {
+        grid[7-point.y][point.x] = 'S'; // Start point
+      } else if (point.type === 'E') {
+        grid[7-point.y][point.x] = 'E'; // End point
+      } else if (point.type === 'P') {
+        grid[7-point.y][point.x] = getSequentialLabel(pathPointIndex); // Sequential path points
+        pathPointIndex++;
+      }
     }
   });
   
@@ -211,7 +228,8 @@ function visualizeStepPath(points, title, gridSize = { width: 8, height: 8 }) {
     output += `Start Point(S): ${startPoints.map(p => `(${p.x},${p.y})`).join(', ')}\n`;
   }
   if (pathPoints.length > 0) {
-    output += `Path Points(P): ${pathPoints.map(p => `(${p.x},${p.y})`).join(' → ')}\n`;
+    const pathLabels = pathPoints.map((p, index) => `${getSequentialLabel(index)}:(${p.x},${p.y})`);
+    output += `Path Points: ${pathLabels.join(' → ')}\n`;
   }
   if (endPoints.length > 0) {
     output += `End Point(E): ${endPoints.map(p => `(${p.x},${p.y})`).join(', ')}\n`;
